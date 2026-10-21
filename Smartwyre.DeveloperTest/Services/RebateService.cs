@@ -9,15 +9,18 @@ public class RebateService : IRebateService
     private readonly IRebateDataStore _rebateDataStore;
     private readonly IProductDataStore _productDataStore;
     private readonly IIncentiveCalculator _fixedCashAmountCalculator;
+    private readonly IIncentiveCalculator _fixedRateRebateCalculator;
 
     public RebateService(
         IRebateDataStore rebateDataStore,
         IProductDataStore productDataStore,
-        IIncentiveCalculator fixedCashAmountCalculator)
+        IIncentiveCalculator fixedCashAmountCalculator,
+        IIncentiveCalculator fixedRateRebateCalculator)
     {
         _rebateDataStore = rebateDataStore;
         _productDataStore = productDataStore;
         _fixedCashAmountCalculator = fixedCashAmountCalculator;
+        _fixedRateRebateCalculator = fixedRateRebateCalculator;
     }
 
     public CalculateRebateResult Calculate(CalculateRebateRequest request)
@@ -38,27 +41,9 @@ public class RebateService : IRebateService
                 break;
 
             case IncentiveType.FixedRateRebate:
-                if (rebate == null)
-                {
-                    result.Success = false;
-                }
-                else if (product == null)
-                {
-                    result.Success = false;
-                }
-                else if (!product.SupportedIncentives.HasFlag(SupportedIncentiveType.FixedRateRebate))
-                {
-                    result.Success = false;
-                }
-                else if (rebate.Percentage == 0 || product.Price == 0 || request.Volume == 0)
-                {
-                    result.Success = false;
-                }
-                else
-                {
-                    rebateAmount += product.Price * rebate.Percentage * request.Volume;
-                    result.Success = true;
-                }
+                var fixedRateAmount = _fixedRateRebateCalculator.Calculate(rebate, product, request);
+                result.Success = fixedRateAmount.HasValue;
+                rebateAmount = fixedRateAmount.GetValueOrDefault();
                 break;
 
             case IncentiveType.AmountPerUom:
