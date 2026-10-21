@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Smartwyre.DeveloperTest.Calculators;
 using Smartwyre.DeveloperTest.Data;
 using Smartwyre.DeveloperTest.Services;
 using Smartwyre.DeveloperTest.Types;
@@ -20,7 +21,7 @@ public class RebateServiceTests
         var rebate = CreateRebate(incentive);
         var rebateStore = new FakeRebateDataStore(rebate);
         var productStore = new FakeProductDataStore(CreateProduct());
-        var service = new RebateService(rebateStore, productStore);
+        var service = CreateService(rebateStore, productStore);
         var request = CreateRequest();
 
         var result = service.Calculate(request);
@@ -64,7 +65,7 @@ public class RebateServiceTests
         var product = CreateProduct();
         product.SupportedIncentives = (SupportedIncentiveType)flags;
         var rebateStore = new FakeRebateDataStore(rebate);
-        var service = new RebateService(rebateStore, new FakeProductDataStore(product));
+        var service = CreateService(rebateStore, new FakeProductDataStore(product));
 
         var result = service.Calculate(CreateRequest());
 
@@ -159,7 +160,7 @@ public class RebateServiceTests
     {
         var rebateStore = new FakeRebateDataStore(null);
         var productStore = new FakeProductDataStore(productAlsoMissing ? null : CreateProduct());
-        var service = new RebateService(rebateStore, productStore);
+        var service = CreateService(rebateStore, productStore);
         var request = CreateRequest();
 
         Assert.Throws<NullReferenceException>(() => service.Calculate(request));
@@ -178,7 +179,7 @@ public class RebateServiceTests
         var rebate = CreateRebate(IncentiveType.FixedCashAmount);
         rebate.Amount = amount;
         var rebateStore = new FakeRebateDataStore(rebate);
-        var service = new RebateService(rebateStore, new FakeProductDataStore(null));
+        var service = CreateService(rebateStore, new FakeProductDataStore(null));
 
         Assert.Throws<NullReferenceException>(() => service.Calculate(CreateRequest()));
 
@@ -191,7 +192,7 @@ public class RebateServiceTests
     public void Calculate_OtherIncentivesWithMissingProduct_ReturnsFailureWithoutPersisting(IncentiveType incentive)
     {
         var rebateStore = new FakeRebateDataStore(CreateRebate(incentive));
-        var service = new RebateService(rebateStore, new FakeProductDataStore(null));
+        var service = CreateService(rebateStore, new FakeProductDataStore(null));
 
         var result = service.Calculate(CreateRequest());
 
@@ -204,7 +205,7 @@ public class RebateServiceTests
     {
         var rebateStore = new FakeRebateDataStore(CreateRebate(IncentiveType.FixedCashAmount));
         var productStore = new FakeProductDataStore(CreateProduct());
-        var service = new RebateService(rebateStore, productStore);
+        var service = CreateService(rebateStore, productStore);
 
         Assert.Throws<NullReferenceException>(() => service.Calculate(null));
 
@@ -244,7 +245,7 @@ public class RebateServiceTests
         var rebate = CreateRebate(incentive);
         var rebateStore = new FakeRebateDataStore(rebate);
         var productStore = new FakeProductDataStore(CreateProduct());
-        var service = new RebateService(rebateStore, productStore);
+        var service = CreateService(rebateStore, productStore);
         var request = CreateRequest();
         if (missingRebateIdentifier)
             request.RebateIdentifier = identifier;
@@ -271,7 +272,7 @@ public class RebateServiceTests
     {
         var rebateStore = new FakeRebateDataStore(CreateRebate((IncentiveType)incentive));
         var productStore = new FakeProductDataStore(productMissing ? null : CreateProduct());
-        var service = new RebateService(rebateStore, productStore);
+        var service = CreateService(rebateStore, productStore);
         var request = CreateRequest();
 
         var result = service.Calculate(request);
@@ -287,7 +288,7 @@ public class RebateServiceTests
         bool expectedSuccess, decimal expectedAmount)
     {
         var rebateStore = new FakeRebateDataStore(rebate);
-        var service = new RebateService(rebateStore, new FakeProductDataStore(product));
+        var service = CreateService(rebateStore, new FakeProductDataStore(product));
 
         var result = service.Calculate(request);
 
@@ -297,6 +298,10 @@ public class RebateServiceTests
         else
             Assert.Empty(rebateStore.SavedCalculations);
     }
+
+    private static RebateService CreateService(
+        IRebateDataStore rebateStore, IProductDataStore productStore) =>
+        new(rebateStore, productStore, new FixedCashAmountCalculator());
 
     private static Rebate CreateRebate(IncentiveType incentive) => new()
     {

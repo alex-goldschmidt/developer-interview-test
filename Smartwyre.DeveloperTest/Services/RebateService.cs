@@ -1,4 +1,5 @@
-﻿using Smartwyre.DeveloperTest.Data;
+﻿using Smartwyre.DeveloperTest.Calculators;
+using Smartwyre.DeveloperTest.Data;
 using Smartwyre.DeveloperTest.Types;
 
 namespace Smartwyre.DeveloperTest.Services;
@@ -7,11 +8,16 @@ public class RebateService : IRebateService
 {
     private readonly IRebateDataStore _rebateDataStore;
     private readonly IProductDataStore _productDataStore;
+    private readonly IIncentiveCalculator _fixedCashAmountCalculator;
 
-    public RebateService(IRebateDataStore rebateDataStore, IProductDataStore productDataStore)
+    public RebateService(
+        IRebateDataStore rebateDataStore,
+        IProductDataStore productDataStore,
+        IIncentiveCalculator fixedCashAmountCalculator)
     {
-        this._rebateDataStore = rebateDataStore;
-        this._productDataStore = productDataStore;
+        _rebateDataStore = rebateDataStore;
+        _productDataStore = productDataStore;
+        _fixedCashAmountCalculator = fixedCashAmountCalculator;
     }
 
     public CalculateRebateResult Calculate(CalculateRebateRequest request)
@@ -26,23 +32,9 @@ public class RebateService : IRebateService
         switch (rebate.Incentive)
         {
             case IncentiveType.FixedCashAmount:
-                if (rebate == null)
-                {
-                    result.Success = false;
-                }
-                else if (!product.SupportedIncentives.HasFlag(SupportedIncentiveType.FixedCashAmount))
-                {
-                    result.Success = false;
-                }
-                else if (rebate.Amount == 0)
-                {
-                    result.Success = false;
-                }
-                else
-                {
-                    rebateAmount = rebate.Amount;
-                    result.Success = true;
-                }
+                var fixedCashAmount = _fixedCashAmountCalculator.Calculate(rebate, product, request);
+                result.Success = fixedCashAmount.HasValue;
+                rebateAmount = fixedCashAmount.GetValueOrDefault();
                 break;
 
             case IncentiveType.FixedRateRebate:
