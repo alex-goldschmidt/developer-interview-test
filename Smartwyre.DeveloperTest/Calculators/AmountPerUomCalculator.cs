@@ -27,6 +27,7 @@ public class AmountPerUomCalculator : IIncentiveCalculator
             return null;
         }
 
-        return rebate.Amount * request.Volume;
+        var result = rebate.Amount * request.Volume;
+        return result;
     }
 }

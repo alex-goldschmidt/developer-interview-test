@@ -19,6 +19,7 @@ public class FixedCashAmountCalculator : IIncentiveCalculator
             return null;
         }
 
-        return rebate.Amount;
+        var result = rebate.Amount;
+        return result;
     }
 }

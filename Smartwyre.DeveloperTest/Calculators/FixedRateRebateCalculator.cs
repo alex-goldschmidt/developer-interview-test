@@ -27,6 +27,7 @@ public class FixedRateRebateCalculator : IIncentiveCalculator
             return null;
         }
 
-        return product.Price * rebate.Percentage * request.Volume;
+        var result = product.Price * rebate.Percentage * request.Volume;
+        return result;
     }
 }
