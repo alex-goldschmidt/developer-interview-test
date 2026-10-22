@@ -1,4 +1,6 @@
-﻿using Smartwyre.DeveloperTest.Calculators;
+﻿using System.Collections.Generic;
+using System.Linq;
+using Smartwyre.DeveloperTest.Calculators;
 using Smartwyre.DeveloperTest.Data;
 using Smartwyre.DeveloperTest.Types;
 
@@ -8,22 +10,16 @@ public class RebateService : IRebateService
 {
     private readonly IRebateDataStore _rebateDataStore;
     private readonly IProductDataStore _productDataStore;
-    private readonly IIncentiveCalculator _fixedCashAmountCalculator;
-    private readonly IIncentiveCalculator _fixedRateRebateCalculator;
-    private readonly IIncentiveCalculator _amountPerUomCalculator;
+    private readonly IReadOnlyDictionary<IncentiveType, IIncentiveCalculator> _calculators;
 
     public RebateService(
         IRebateDataStore rebateDataStore,
         IProductDataStore productDataStore,
-        IIncentiveCalculator fixedCashAmountCalculator,
-        IIncentiveCalculator fixedRateRebateCalculator,
-        IIncentiveCalculator amountPerUomCalculator)
+        IEnumerable<IIncentiveCalculator> calculators)
     {
         _rebateDataStore = rebateDataStore;
         _productDataStore = productDataStore;
-        _fixedCashAmountCalculator = fixedCashAmountCalculator;
-        _fixedRateRebateCalculator = fixedRateRebateCalculator;
-        _amountPerUomCalculator = amountPerUomCalculator;
+        _calculators = calculators.ToDictionary(calculator => calculator.Incentive);
     }
 
     public CalculateRebateResult Calculate(CalculateRebateRequest request)
@@ -33,32 +29,17 @@ public class RebateService : IRebateService
 
         var result = new CalculateRebateResult();
 
-        var rebateAmount = 0m;
-
-        switch (rebate.Incentive)
+        if (!_calculators.TryGetValue(rebate.Incentive, out var calculator))
         {
-            case IncentiveType.FixedCashAmount:
-                var fixedCashAmount = _fixedCashAmountCalculator.Calculate(rebate, product, request);
-                result.Success = fixedCashAmount.HasValue;
-                rebateAmount = fixedCashAmount.GetValueOrDefault();
-                break;
-
-            case IncentiveType.FixedRateRebate:
-                var fixedRateAmount = _fixedRateRebateCalculator.Calculate(rebate, product, request);
-                result.Success = fixedRateAmount.HasValue;
-                rebateAmount = fixedRateAmount.GetValueOrDefault();
-                break;
-
-            case IncentiveType.AmountPerUom:
-                var amountPerUom = _amountPerUomCalculator.Calculate(rebate, product, request);
-                result.Success = amountPerUom.HasValue;
-                rebateAmount = amountPerUom.GetValueOrDefault();
-                break;
+            return result;
         }
+
+        var rebateAmount = calculator.Calculate(rebate, product, request);
+        result.Success = rebateAmount.HasValue;
 
         if (result.Success)
         {
-            _rebateDataStore.StoreCalculationResult(rebate, rebateAmount);
+            _rebateDataStore.StoreCalculationResult(rebate, rebateAmount.Value);
         }
 
         return result;

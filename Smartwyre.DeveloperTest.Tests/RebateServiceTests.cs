@@ -304,9 +304,12 @@ public class RebateServiceTests
         new(
             rebateStore,
             productStore,
-            new FixedCashAmountCalculator(),
-            new FixedRateRebateCalculator(),
-            new AmountPerUomCalculator());
+            new IIncentiveCalculator[]
+            {
+                new FixedCashAmountCalculator(),
+                new FixedRateRebateCalculator(),
+                new AmountPerUomCalculator()
+            });
 
     private static Rebate CreateRebate(IncentiveType incentive) => new()
     {
