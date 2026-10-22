@@ -19,21 +19,72 @@ class Program
 
     private static ExitCode Run(string[] args)
     {
-        var isHelpRequested = args.Length == 1
-            && (string.Equals(args[0], HelpOption, StringComparison.Ordinal)
-                || string.Equals(args[0], ShortHelpOption, StringComparison.Ordinal));
-
-        if (args.Length == 0 || isHelpRequested)
+        if (IsHelpRequested(args))
         {
             PrintUsage();
             return ExitCode.Success;
         }
 
+        if (!TryParseArguments(args, out var request))
+        {
+            return ExitCode.InvalidInput;
+        }
+
+        var demoData = new DemoData();
+        var rebate = demoData.RebateStore.GetRebate(request.RebateIdentifier);
+        var product = demoData.ProductStore.GetProduct(request.ProductIdentifier);
+
+        if (rebate == null)
+        {
+            Console.Error.WriteLine($"Unknown rebate '{request.RebateIdentifier}'. Use {HelpOption} to see the demo identifiers.");
+            return ExitCode.InvalidInput;
+        }
+
+        if (product == null)
+        {
+            Console.Error.WriteLine($"Unknown product '{request.ProductIdentifier}'. Use {HelpOption} to see the demo identifiers.");
+            return ExitCode.InvalidInput;
+        }
+
+        var service = new RebateService(
+            demoData.RebateStore,
+            demoData.ProductStore,
+            new IIncentiveCalculator[]
+            {
+                new FixedCashAmountCalculator(),
+                new FixedRateRebateCalculator(),
+                new AmountPerUomCalculator()
+            });
+
+        request.RebateIdentifier = rebate.Identifier;
+        request.ProductIdentifier = product.Identifier;
+
+        var result = CalculateResult(service, request);
+        DisplayResult(result, demoData.RebateStore.StoredCalculation, product, request.Volume);
+        return result;
+    }
+
+    /// <summary>
+    /// Recognizes no arguments or a single explicit help option as a help request.
+    /// </summary>
+    private static bool IsHelpRequested(string[] args) =>
+        args.Length == 0
+        || (args.Length == 1
+            && (string.Equals(args[0], HelpOption, StringComparison.Ordinal)
+                || string.Equals(args[0], ShortHelpOption, StringComparison.Ordinal)));
+
+    /// <summary>
+    /// Parses the required arguments into a request, displaying an error for invalid input.
+    /// </summary>
+    private static bool TryParseArguments(string[] args, out CalculateRebateRequest request)
+    {
+        request = null;
+
         if (args.Length != RequiredArgumentCount)
         {
             Console.Error.WriteLine("Expected a rebate identifier, product identifier, and volume.");
             PrintUsage();
-            return ExitCode.InvalidInput;
+            return false;
         }
 
         var rebateIdentifier = args[0];
@@ -47,109 +98,64 @@ class Program
                 out var volume))
         {
             Console.Error.WriteLine("Volume must be a decimal number using '.' as the decimal separator.");
-            return ExitCode.InvalidInput;
+            return false;
         }
 
-        var rebateStore = CreateRebateStore();
-        var productStore = CreateProductStore();
-        var rebate = rebateStore.GetRebate(rebateIdentifier);
-        var product = productStore.GetProduct(productIdentifier);
-
-        if (rebate == null)
+        request = new CalculateRebateRequest
         {
-            Console.Error.WriteLine($"Unknown rebate '{rebateIdentifier}'. Use {HelpOption} to see the demo identifiers.");
-            return ExitCode.InvalidInput;
-        }
-
-        if (product == null)
-        {
-            Console.Error.WriteLine($"Unknown product '{productIdentifier}'. Use {HelpOption} to see the demo identifiers.");
-            return ExitCode.InvalidInput;
-        }
-
-        var service = new RebateService(
-            rebateStore,
-            productStore,
-            new IIncentiveCalculator[]
-            {
-                new FixedCashAmountCalculator(),
-                new FixedRateRebateCalculator(),
-                new AmountPerUomCalculator()
-            });
-
-        var request = new CalculateRebateRequest
-        {
-            RebateIdentifier = rebate.Identifier,
-            ProductIdentifier = product.Identifier,
+            RebateIdentifier = rebateIdentifier,
+            ProductIdentifier = productIdentifier,
             Volume = volume
         };
+        return true;
+    }
 
-        CalculateRebateResult result;
+    /// <summary>
+    /// Runs the calculation and maps success, failure, or decimal overflow to a runner exit code.
+    /// </summary>
+    private static ExitCode CalculateResult(IRebateService service, CalculateRebateRequest request)
+    {
         try
         {
-            result = service.Calculate(request);
+            var result = service.Calculate(request);
+
+            if (!result.Success)
+            {
+                return ExitCode.CalculationFailed;
+            }
+
+            return ExitCode.Success;
         }
         catch (OverflowException)
         {
-            Console.Error.WriteLine("The supplied volume makes this calculation exceed the supported decimal range.");
             return ExitCode.InvalidInput;
         }
-
-        if (!result.Success)
-        {
-            Console.WriteLine("Calculation failed. Check the product's supported incentives and the rebate's required values.");
-            return ExitCode.CalculationFailed;
-        }
-
-        Console.WriteLine($"Incentive: {rebate.Incentive}");
-        Console.WriteLine($"Product: {product.Identifier}");
-        Console.WriteLine($"Volume: {volume.ToString(CultureInfo.InvariantCulture)}");
-        Console.WriteLine($"Rebate amount: {rebateStore.StoredCalculation.Amount.ToString(CultureInfo.InvariantCulture)}");
-        Console.WriteLine("Calculation saved in memory for this run.");
-        return ExitCode.Success;
     }
 
-    private static InMemoryRebateDataStore CreateRebateStore() => new(new[]
+    /// <summary>
+    /// Displays the calculation outcome, reading the saved amount only after success.
+    /// </summary>
+    private static void DisplayResult(
+        ExitCode result, RebateCalculation calculation, Product product, decimal volume)
     {
-        new Rebate
+        if (result == ExitCode.InvalidInput)
         {
-            Identifier = "cash",
-            Incentive = IncentiveType.FixedCashAmount,
-            Amount = 10m
-        },
-        new Rebate
-        {
-            Identifier = "rate",
-            Incentive = IncentiveType.FixedRateRebate,
-            Percentage = 0.1m
-        },
-        new Rebate
-        {
-            Identifier = "per-uom",
-            Incentive = IncentiveType.AmountPerUom,
-            Amount = 2.5m
+            Console.Error.WriteLine("The supplied volume makes this calculation exceed the supported decimal range.");
+            return;
         }
-    });
 
-    private static InMemoryProductDataStore CreateProductStore() => new(new[]
-    {
-        new Product
+        if (result == ExitCode.CalculationFailed)
         {
-            Identifier = "product-1",
-            Price = 20m,
-            Uom = "unit",
-            SupportedIncentives = SupportedIncentiveType.FixedCashAmount
-                | SupportedIncentiveType.FixedRateRebate
-                | SupportedIncentiveType.AmountPerUom
-        },
-        new Product
-        {
-            Identifier = "unsupported-product",
-            Price = 20m,
-            Uom = "unit",
-            SupportedIncentives = (SupportedIncentiveType)0
+            Console.WriteLine("Calculation failed. Check the product's supported incentives and the rebate's required values.");
+            return;
         }
-    });
+
+        Console.WriteLine($"Incentive: {calculation.IncentiveType}");
+        Console.WriteLine($"Product: {product.Identifier}");
+        Console.WriteLine($"Volume: {volume.ToString(CultureInfo.InvariantCulture)}");
+        Console.WriteLine($"Rebate amount: {calculation.Amount.ToString(CultureInfo.InvariantCulture)}");
+        Console.WriteLine("Calculation saved in memory for this run.");
+    }
 
     private static void PrintUsage()
     {
