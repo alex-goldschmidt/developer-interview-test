@@ -1,15 +1,15 @@
 using System;
-using System.Collections.Generic;
 using Smartwyre.DeveloperTest.Calculators;
 using Smartwyre.DeveloperTest.Data;
 using Smartwyre.DeveloperTest.Services;
 using Smartwyre.DeveloperTest.Types;
 using Xunit;
+using static Smartwyre.DeveloperTest.Tests.RebateTestSupport;
 
 namespace Smartwyre.DeveloperTest.Tests;
 
 // These tests describe current behavior, including defects to address in a later phase.
-public class RebateServiceTests
+public class RebateServiceCharacterizationTests
 {
     [Theory]
     [InlineData(IncentiveType.FixedCashAmount, 12.75)]
@@ -71,9 +71,13 @@ public class RebateServiceTests
 
         Assert.Equal(expectedSuccess, result.Success);
         if (expectedSuccess)
+        {
             AssertSavedCalculation(rebateStore, rebate, expectedAmount);
+        }
         else
+        {
             Assert.Empty(rebateStore.SavedCalculations);
+        }
     }
 
     [Theory]
@@ -248,9 +252,13 @@ public class RebateServiceTests
         var service = CreateService(rebateStore, productStore);
         var request = CreateRequest();
         if (missingRebateIdentifier)
+        {
             request.RebateIdentifier = identifier;
+        }
         else
+        {
             request.ProductIdentifier = identifier;
+        }
 
         var result = service.Calculate(request);
 
@@ -294,9 +302,13 @@ public class RebateServiceTests
 
         Assert.Equal(expectedSuccess, result.Success);
         if (expectedSuccess)
+        {
             AssertSavedCalculation(rebateStore, rebate, expectedAmount);
+        }
         else
+        {
             Assert.Empty(rebateStore.SavedCalculations);
+        }
     }
 
     private static RebateService CreateService(
@@ -310,72 +322,4 @@ public class RebateServiceTests
                 new FixedRateRebateCalculator(),
                 new AmountPerUomCalculator()
             });
-
-    private static Rebate CreateRebate(IncentiveType incentive) => new()
-    {
-        Identifier = "rebate-1",
-        Incentive = incentive,
-        Amount = 12.75m,
-        Percentage = 0.125m
-    };
-
-    private static Product CreateProduct() => new()
-    {
-        Identifier = "product-1",
-        Price = 35.57m,
-        SupportedIncentives = SupportedIncentiveType.FixedCashAmount
-            | SupportedIncentiveType.FixedRateRebate
-            | SupportedIncentiveType.AmountPerUom
-    };
-
-    private static CalculateRebateRequest CreateRequest() => new()
-    {
-        RebateIdentifier = "rebate-1",
-        ProductIdentifier = "product-1",
-        Volume = 3.5m
-    };
-
-    private static void AssertSavedCalculation(
-        FakeRebateDataStore store, Rebate expectedRebate, decimal expectedAmount)
-    {
-        var calculation = Assert.Single(store.SavedCalculations);
-        Assert.Same(expectedRebate, calculation.Rebate);
-        Assert.Equal(expectedAmount, calculation.Amount);
-    }
-
-    private sealed class FakeRebateDataStore : IRebateDataStore
-    {
-        private readonly Rebate rebate;
-
-        public FakeRebateDataStore(Rebate rebate) => this.rebate = rebate;
-
-        public List<string> RequestedIdentifiers { get; } = new();
-        public List<(Rebate Rebate, decimal Amount)> SavedCalculations { get; } = new();
-
-        public Rebate GetRebate(string rebateIdentifier)
-        {
-            RequestedIdentifiers.Add(rebateIdentifier);
-            return rebate;
-        }
-
-        public void StoreCalculationResult(Rebate rebate, decimal rebateAmount)
-        {
-            SavedCalculations.Add((rebate, rebateAmount));
-        }
-    }
-
-    private sealed class FakeProductDataStore : IProductDataStore
-    {
-        private readonly Product product;
-
-        public FakeProductDataStore(Product product) => this.product = product;
-
-        public List<string> RequestedIdentifiers { get; } = new();
-
-        public Product GetProduct(string productIdentifier)
-        {
-            RequestedIdentifiers.Add(productIdentifier);
-            return product;
-        }
-    }
 }
