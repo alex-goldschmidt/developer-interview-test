@@ -10,17 +10,20 @@ public class RebateService : IRebateService
     private readonly IProductDataStore _productDataStore;
     private readonly IIncentiveCalculator _fixedCashAmountCalculator;
     private readonly IIncentiveCalculator _fixedRateRebateCalculator;
+    private readonly IIncentiveCalculator _amountPerUomCalculator;
 
     public RebateService(
         IRebateDataStore rebateDataStore,
         IProductDataStore productDataStore,
         IIncentiveCalculator fixedCashAmountCalculator,
-        IIncentiveCalculator fixedRateRebateCalculator)
+        IIncentiveCalculator fixedRateRebateCalculator,
+        IIncentiveCalculator amountPerUomCalculator)
     {
         _rebateDataStore = rebateDataStore;
         _productDataStore = productDataStore;
         _fixedCashAmountCalculator = fixedCashAmountCalculator;
         _fixedRateRebateCalculator = fixedRateRebateCalculator;
+        _amountPerUomCalculator = amountPerUomCalculator;
     }
 
     public CalculateRebateResult Calculate(CalculateRebateRequest request)
@@ -47,27 +50,9 @@ public class RebateService : IRebateService
                 break;
 
             case IncentiveType.AmountPerUom:
-                if (rebate == null)
-                {
-                    result.Success = false;
-                }
-                else if (product == null)
-                {
-                    result.Success = false;
-                }
-                else if (!product.SupportedIncentives.HasFlag(SupportedIncentiveType.AmountPerUom))
-                {
-                    result.Success = false;
-                }
-                else if (rebate.Amount == 0 || request.Volume == 0)
-                {
-                    result.Success = false;
-                }
-                else
-                {
-                    rebateAmount += rebate.Amount * request.Volume;
-                    result.Success = true;
-                }
+                var amountPerUom = _amountPerUomCalculator.Calculate(rebate, product, request);
+                result.Success = amountPerUom.HasValue;
+                rebateAmount = amountPerUom.GetValueOrDefault();
                 break;
         }
 

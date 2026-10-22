@@ -301,7 +301,12 @@ public class RebateServiceTests
 
     private static RebateService CreateService(
         IRebateDataStore rebateStore, IProductDataStore productStore) =>
-        new(rebateStore, productStore, new FixedCashAmountCalculator(), new FixedRateRebateCalculator());
+        new(
+            rebateStore,
+            productStore,
+            new FixedCashAmountCalculator(),
+            new FixedRateRebateCalculator(),
+            new AmountPerUomCalculator());
 
     private static Rebate CreateRebate(IncentiveType incentive) => new()
     {
